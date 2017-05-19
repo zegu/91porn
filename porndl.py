@@ -212,7 +212,6 @@ if __name__ == '__main__':
     get_real = 'http://91.9p91.com/getfile_jw.php?VID='
     base_url = init_base_url()
     all_proxies = init_proxies(300)
-    exit()
 
     # view_ids = list(set(craw_lists('top', 5, '&m=2')))
     view_ids = ['552e22b0276be5fe150a', 'ab53e10718a30bb25237', '84eebb5a843d7686e150', 'f307c7e7488e0ff6ebbb',
