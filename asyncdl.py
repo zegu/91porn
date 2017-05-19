@@ -7,11 +7,12 @@ import time
 from urllib import parse
 from config import get_header
 from db.DataStore import sqlhelper
+import aiohttp
+import asyncio
+import async_timeout
 
 cookies = {'language': 'cn_CN'}
 requests.adapters.DEFAULT_RETRIES = 3
-get_real = 'http://91.9p91.com/getfile_jw.php?VID='
-current_proxy = None
 
 # video_url_reg = re.compile('<a target=blank href="(.*?)"')
 video_view_id_reg = re.compile('viewkey=(.*?)&')
@@ -26,6 +27,7 @@ cont_queue = []
 video_queue = []
 video_list = []
 all_proxies = []
+view_ids_queue = []
 
 
 def init_proxies(count=100):
@@ -35,25 +37,20 @@ def init_proxies(count=100):
 
 
 def get_proxy():
-    global current_proxy
     if not len(all_proxies):
         raise AssertionError('No chinese proxy is valid，Please use -x or -s option instead!')
     proxy_index = random.randint(0, len(all_proxies) - 1)
-    if not current_proxy:
-        proxy = all_proxies[proxy_index]
-        current_proxy = {
-            'ip': proxy[0],
-            'port': proxy[1],
-            'index': proxy_index,
-            'http': '%s:%s' % (proxy[0], proxy[1])
-        }
-    return current_proxy
+    proxy = all_proxies[proxy_index]
+    return {
+        'ip': proxy[0],
+        'port': proxy[1],
+        'index': proxy_index,
+        'http': '%s:%s' % (proxy[0], proxy[1])
+    }
 
 
 def remove_proxy(proxy):
     try:
-        global current_proxy
-        current_proxy = None
         all_proxies.pop(proxy['index'])
         requests.get('http://127.0.0.1:8000/delete?ip=' + proxy['ip'])
         print('remove proxy %s' % proxy['http'])
@@ -75,69 +72,56 @@ def decode_lists(content):
     return vid_lists
 
 
-def get_detail_content(video_url):
+async def get_detail_content(session, video_url):
     retry = 0
-    times = 100
+    times = 10
     success = False
     while retry < times:
         try:
             proxies = get_proxy()
-            print('start parse url: %s, use proxy %s' % (video_url, proxies['http']))
-            r = requests.get(video_url, cookies=cookies, proxies=proxies)
-            content = r.content.decode('utf-8', 'backslashreplace')
-
-            if r.status_code is 200:
-                print('fetch url %s success' % video_url)
+            content = await fetch(session, video_url, 'http://' + proxies['http'])
+            print(video_url + ' begin decode')
+            if '<source' in content:
+                print(video_url + ' Succeed!')
+                success = True
+                break
+            else:
                 if '你每天只可观看10个视频' in content:
                     print(proxies['http'] + ' 超出限制')
-                    remove_proxy(proxies)
-                    pass
                 elif 'recaptcha' in content:
                     print(proxies['http'] + ' 需要验证码')
-                    remove_proxy(proxies)
-                    pass
-                elif '<source' in content:
-                    print(proxies['http'] + ' Succeed!')
-                    success = True
-                    break
                 else:
                     print(content)
-            else:
-                print('fetch url %s fail with code %s' % (video_url, r.status_code))
                 remove_proxy(proxies)
-
+                pass
         except Exception as e:
             print('get_detail_content fail', e)
             remove_proxy(proxies)
         finally:
             retry = retry + 1
     if success:
-        return content
-    print('get_detail_content fail')
-
-
-def get_video_info(vid=''):
-    api_url = get_real + vid
-    vid_info_string = requests.get(api_url).content.decode('utf-8')
-    vid_info = parse.parse_qs(str(vid_info_string))
-    return vid_info
+        return await content
+    print('%s Fail!' % video_url)
+    return None
 
 
 def init_base_url():
-    vid_info = get_video_info()
+    api_url = get_real
+    vid_info_string = requests.get(api_url).content.decode('utf-8')
+    vid_info = parse.parse_qs(str(vid_info_string))
     url = vid_info['domainUrl'][0]
     print('use base url ' + url)
     return url
 
 
-def decode_video_info(vid, extract_info={}, url_only=False):
+async def decode_video_info(session, vid, extract_info={}, url_only=False):
     try:
-        vid_info = get_video_info(vid)
+        vid_info = await get_video_info(session, vid)
         vid_no = vid_info['VID'][0]
         download_url = vid_info['file'][0] + '?' + 'st=' + vid_info['st'][0] + '&' + 'e=' + vid_info['e'][0]
 
         if url_only:
-            return download_url
+            return await download_url
 
         info = {
             'vid': vid,
@@ -146,44 +130,26 @@ def decode_video_info(vid, extract_info={}, url_only=False):
             'download_url': download_url
         }
         info.update(extract_info)
-        return info
+        return await info
     except Exception as e:
         print('decode_video_info fail', e)
 
 
-def decode_download_url(content):
+async def decode_download_url(session, content):
     try:
         content = str(content)
         vid = vid_reg.findall(content)[0]
         view_id = video_view_id_reg.findall(content)[0]
         title = title_reg.findall(content)[0].strip()
-        return decode_video_info(vid, {'title': title, 'view_id': view_id})
+        return decode_video_info(session, vid, {'title': title, 'view_id': view_id})
     except Exception as e:
         print('decode_download_url fail', e)
-
-
-def craw_lists_detail(view_ids):
-    for view_id in view_ids:
-        craw_detail(view_id)
-
-
-def craw_detail(view_id):
-    if not check_vid_exist(view_id):
-        detail_url_format = base_url + '/view_video.php?viewkey=%s'
-        vid_info = decode_download_url(
-            get_detail_content(detail_url_format % view_id)
-        )
-        if vid_info:
-            save_vid_info(vid_info)
-        else:
-            print('video %s fail' % view_id)
-    else:
-        print('video %s exist' % view_id)
 
 
 def check_vid_exist(view_id):
     res = sqlhelper.select(1, {'view_id': view_id})
     if len(res):
+        view_ids_queue.remove(view_id)
         return True
     return False
 
@@ -212,20 +178,61 @@ def craw_lists(category, total_page=20, params=''):
     return view_ids
 
 
+async def fetch(session, video_url, proxy=None):
+    with async_timeout.timeout(10):
+        proxies = get_proxy()
+        print('request url: %s, with proxy %s' % (video_url, proxies['http']))
+        if proxy:
+            proxy = 'http://' + proxies['http']
+            async with session.get(video_url, proxy=proxy) as response:
+                print('start parse url: %s, use proxy %s' % (video_url, proxy))
+                return await response.text(encoding='utf-8')
+        else:
+            async with session.get(video_url) as response:
+                return await response.text(encoding='utf-8')
+
+
+async def craw_lists_detail(loop, view_ids):
+    for view_id in view_ids:
+        async with aiohttp.ClientSession(loop=loop, cookies=cookies) as session:
+            await craw_detail(session, view_id)
+
+
+async def craw_detail(session, view_id):
+    if not check_vid_exist(view_id):
+        detail_url_format = base_url + '/view_video.php?viewkey=%s'
+        r = await get_detail_content(session, detail_url_format % view_id)
+        if r:
+            vid_info = await decode_download_url(session, r.text(encoding='utf-8'))
+            print(vid_info)
+            save_vid_info(vid_info)
+            return await True
+        print('get %s Fail ' % view_id)
+    else:
+        print('video %s exist' % view_id)
+
+
+async def get_video_info(session, vid=''):
+    api_url = get_real + vid
+    vid_info_string = await fetch(session, api_url)
+    vid_info = parse.parse_qs(str(vid_info_string))
+    return await vid_info
+
+
 if __name__ == '__main__':
     # with open('list.html', 'r') as f:
     #     lists_content = str(f.readlines())
 
     # with open('detail.html', 'r') as f:
     #     detail_content = str(f.readlines())
+    get_real = 'http://91.9p91.com/getfile_jw.php?VID='
     base_url = init_base_url()
     all_proxies = init_proxies(300)
-    if len(all_proxies) <= 0:
-        raise Exception('no proxies')
-
-    view_ids = list(set(craw_lists('top', 5, '&m=2')))
-    print('start craw video total %d' % len(view_ids))
-    craw_lists_detail(view_ids)
+    print('init with proxy count %d' % len(all_proxies))
+    view_ids_queue = list(set(craw_lists('top', 5, '&m=1')))
+    print('start craw video total %d' % len(view_ids_queue))
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(craw_lists_detail(loop, view_ids_queue))
 
     # craw_lists_detail(['c4c9d90994731a152596'])
 
