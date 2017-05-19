@@ -35,11 +35,11 @@ def init_proxies(count=100):
 
 
 def get_proxy():
-    global current_proxy
     if not len(all_proxies):
         raise AssertionError('No chinese proxy is valid，Please use -x or -s option instead!')
-    proxy_index = random.randint(0, len(all_proxies) - 1)
+    global current_proxy
     if not current_proxy:
+        proxy_index = random.randint(0, len(all_proxies) - 1)
         proxy = all_proxies[proxy_index]
         current_proxy = {
             'ip': proxy[0],
@@ -219,10 +219,12 @@ if __name__ == '__main__':
     #     detail_content = str(f.readlines())
     base_url = init_base_url()
     all_proxies = init_proxies(300)
+    print('init proxies %d' % len(all_proxies))
     if len(all_proxies) <= 0:
         raise Exception('no proxies')
+    exit()
 
-    view_ids = list(set(craw_lists('top', 5, '&m=2')))
+    view_ids = list(set(craw_lists('top', 5, '&m=3')))
     print('start craw video total %d' % len(view_ids))
     craw_lists_detail(view_ids)
 
