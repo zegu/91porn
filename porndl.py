@@ -22,9 +22,6 @@ title_reg = re.compile('<title>([\w\W]*?)-')
 # vhead = 'http://91.9p91.com/9e.swf?autoplay=false&video_id=%s&mp4=999'
 # tr = "<tr><td>%s</td><td><form target='_blank' action='hhhhhhhhplayer.html'><input type='hidden' name='url' value='%s'/> <input type='submit' value='view online'/></form></td></tr>\n"
 
-cont_queue = []
-video_queue = []
-video_list = []
 all_proxies = []
 
 
@@ -35,6 +32,7 @@ def init_proxies(count=100):
 
 
 def get_proxy():
+    global all_proxies
     if not len(all_proxies):
         raise AssertionError('No chinese proxy is valid，Please use -x or -s option instead!')
     global current_proxy
