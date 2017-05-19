@@ -88,20 +88,19 @@ def get_detail_content(video_url):
 
             if r.status_code is 200:
                 print('fetch url %s success' % video_url)
-                if '你每天只可观看10个视频' in content:
-                    print(proxies['http'] + ' 超出限制')
-                    remove_proxy(proxies)
-                    pass
-                elif 'recaptcha' in content:
-                    print(proxies['http'] + ' 需要验证码')
-                    remove_proxy(proxies)
-                    pass
-                elif '<source' in content:
-                    print(proxies['http'] + ' Succeed!')
+                if '<source' in content:
+                    print('Succeed!')
                     success = True
                     break
+                if '你每天只可观看10个视频' in content:
+                    print(' 超出限制')
+                elif 'recaptcha' in content:
+                    print(' 需要验证码')
+                elif 'blockpage' in content:
+                    print(' blocked')
                 else:
                     print(content)
+                remove_proxy(proxies)
             else:
                 print('fetch url %s fail with code %s' % (video_url, r.status_code))
                 remove_proxy(proxies)
