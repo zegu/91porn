@@ -20,11 +20,11 @@ class Video(BaseModel):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True, autoincrement=True)
     view_id = Column(VARCHAR(100), nullable=False)
-    vid = Column(VARCHAR(100), nullable=False)
-    vno = Column(VARCHAR(32), nullable=False)
     title = Column(VARCHAR(300), nullable=False, default=0)
     img_url = Column(VARCHAR(100), nullable=False)
     download_url = Column(VARCHAR(300), nullable=False)
+    vid = Column(VARCHAR(100), nullable=True)
+    vno = Column(VARCHAR(32), nullable=True)
     updatetime = Column(DateTime(), default=datetime.datetime.utcnow)
     downloaded = Column(Integer, default=0)
 

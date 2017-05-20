@@ -16,4 +16,6 @@ if __name__ == '__main__':
         vno = file_info[0]
         title = query_title(vno)
         if title:
-            os.rename(dir + filename, dir + '%s-%s.%s' % (title, vno, file_info[1]))
+            title = title.replace('\n', '').replace('/', '').replace(' ', '')
+            os.rename(dir + filename,
+                      dir + '%s-%s.%s' % (title, vno, file_info[1]))
